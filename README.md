@@ -1,125 +1,114 @@
 # gl
 
-OpenGL 3.3 core bindings for [Milo](https://github.com/milo-language/milo), plus a safe
-layer over them. No dependencies beyond the standard library.
+This is a package for the [Milo language](https://milo-language.github.io/milo/).
+
+## Overview
+
+OpenGL 3.3 core bindings, plus a safe layer over them: shaders, meshes,
+textures and framebuffers, with the raw pointers kept out of your program. Drop
+to `gl/raw` for an entry point it does not wrap.
+
+You supply the context. Creating one belongs to the window system rather than
+here, so `examples/` and `tests/` get theirs from the
+[`sdl`](https://github.com/milo-language/milo-sdl) package's `sdl/gl` module.
+darwin and linux only.
+
+Nothing here has a `Drop`, which is not the usual Milo answer. The context owns
+every object it hands out and frees whatever is left when you call `gl.free()`.
+Freeing one yourself early is a move, so touching it afterwards is a compile
+error rather than a driver-level mystery.
+
+Why it works that way, and every function and method:
+[docs/api.md](docs/api.md).
+
+## Installation
 
 ```bash
 milo add github.com/milo-language/milo-gl            # latest release
-milo add github.com/milo-language/milo-gl@v0.2.0     # or pin a specific tag
+milo add github.com/milo-language/milo-gl@v0.2.0     # or pin a tag
 ```
 
 ```milo
-from "gl" import { Gpu, Shader, Mesh }
-
-var sh = Shader.compile(VERT, FRAG)!
-var quad = Mesh.fullscreenQuad()
-Gpu.clear(0.0, 0.0, 0.0, 1.0, true)
-sh.bind()
-sh.uniformF("time", t)
-quad.draw()
+from "gl" import { GlContext, Gpu, Shader, Mesh, Texture2D }
 ```
 
-`gl` owns the shader, buffer, texture and framebuffer lifecycles and keeps the raw
-pointers out of your program. Drop to `gl/raw` for an entry point it does not wrap.
+## Examples
 
-## The context owns its objects
-
-Nothing here has a `Drop`, and that is not the usual Milo answer — `Vec` and `string`
-free themselves, and no other package makes you call anything.
-
-GL is the exception because `glDelete*` requires the context that made the object to
-still be current, on the thread it was made on. A destructor is exactly the thing whose
-timing you do not control. Rust libraries solve this by giving every GL object an
-`Arc<Context>`, so the context is provably alive whenever an object drops. **Milo cannot
-express that**: references are second-class, so a struct can never store a
-`&GlContext`, and an object therefore cannot keep its context alive.
-
-So ownership runs the other way. A `GlContext` records every name it hands out and
-deletes whatever is left, once, where you put the call:
+### Drawing a frame
 
 ```milo
-var gl = GlContext.new()                              // after the window system's context
-var tex = Texture2D.rgba8(gl, w, h, pixels, false)
-var sh  = Shader.compile(gl, VERT, FRAG)!
-// ... draw ...
-gl.free()                                             // sweeps anything still outstanding
+from "gl" import { GlContext, Gpu, Shader, Mesh }
+
+fn main(): i32 {
+    // A GL context must already be current: creating one is the window
+    // system's job, not this package's.
+    var gl = GlContext.new()
+
+    var sh = Shader.compile(gl, VERT, FRAG)!
+    var quad = Mesh.fullscreenQuad(gl)
+
+    Gpu.clear(0.0, 0.0, 0.0, 1.0, true)
+    sh.bind()
+    sh.uniformF("time", 0.5)
+    quad.draw()
+
+    gl.free()   // sweeps anything still outstanding
+    return 0
+}
 ```
 
-You can still free an object the moment you are done, and should for anything replaced
-mid-run — a texture swapped every time the scene changes should not wait for teardown.
-`free` takes the context so the name can be handed back:
+`Shader.compile` returns a `Result` carrying the driver's own log, so a shader
+that does not compile tells you why.
+
+### Textures on 3D geometry
+
+The constructors start clamped, unfiltered and mip-less, which is right for a
+texture that is a picture of the whole frame. A texture laid over 3D geometry
+wants the other three settings:
 
 ```milo
-let t = Texture2D.rgba8(gl, w, h, pixels, false)
+from "gl" import { GlContext, Texture2D, Wrap }
+
+fn uploadGround(gl: &mut GlContext, w: i64, h: i64, bytes: &Vec<u8>): Texture2D {
+    let ground = Texture2D.srgb8(gl, w, h, bytes, true)
+    ground.setWrap(Wrap.Repeat)      // UV is world position over a period, not 0..1
+    ground.generateMipmaps()         // after the upload: it derives the chain from level 0
+    ground.setAnisotropy(16.0)       // no-op without GL_EXT_texture_filter_anisotropic
+    return ground
+}
+```
+
+`srgb8` takes three sRGB bytes per pixel, what a PNG decodes to, and the sampler
+decodes to linear in hardware before filtering. Doing that in the shader
+afterwards is both slower and wrong. Mipmaps are not optional for anything tiled
+across a 3D surface, and anisotropy fixes what mips alone get wrong at a grazing
+angle. [docs/api.md](docs/api.md) explains both.
+
+### Freeing an object early
+
+Anything replaced mid-run should be freed the moment you are done with it rather
+than waiting for teardown. `free` takes the context, so the name can go back:
+
+```milo
+let t = Texture2D.rgba8(gl, 16, 16, pixels, false)
 t.free(gl)
-t.bind(0)   // error: use of moved variable 't'
+t.bind(0)
 ```
 
-`@noCopy` is what makes that a **compile error** rather than a driver-level mystery, and
-it is why these types are not `Copy` — they are integers, and the all-fields-Copy rule
-would otherwise make `free` consume nothing.
-
-The two checks cover different failures and neither subsumes the other. `@noCopy` catches
-use-after-free and double-free, which the context cannot see. The context catches
-forgetting, which `@noCopy` cannot see. `GlContext.live()` reports how many objects are
-outstanding, so a leak in a frame loop is a number you can assert on rather than a slow
-climb in a memory graph.
-
-Uploads are bounds-checked too — the driver reads `w * h` elements off a pointer with no
-idea how long your `Vec` is, so a short one would be a heap over-read from a call with no
-`unsafe` at the call site.
-
-## Textures for 3D, not just for full-frame passes
-
-The constructors all start clamped, unfiltered and mip-less, which is right for a texture
-that is a picture of the whole frame. A texture laid over 3D geometry wants the other
-three:
-
-```milo
-let ground = Texture2D.srgb8(w, h, bytes, true)
-ground.setWrap(Wrap.Repeat)      // UV is world position over a period, not 0..1
-ground.generateMipmaps()         // after the upload — it derives the chain from level 0
-ground.setAnisotropy(16.0)       // no-op without GL_EXT_texture_filter_anisotropic
+```
+error: use of moved variable 't'
+  ──> texture.milo:9:5
+  │
+9 │     t.bind(0)
+  │     ^
+  hint: 't' is a @noCopy handle, so transferring it ended its life here — copying
+        one would let the same resource be released twice. Borrow it (pass it to
+        a '&Texture2D' parameter) instead of transferring, or reorder so the
+        transfer is last.
 ```
 
-`srgb8` takes three sRGB bytes per pixel — what a PNG decodes to — and the sampler
-decodes to linear **in hardware, before filtering**. Doing it afterwards in the shader is
-both slower and wrong: a bilinear tap averages four sRGB bytes, and the average of two
-sRGB values is not the sRGB of their linear average, so edges come out too dark. A
-lookup table per fetch has the same flaw and costs a dependent read.
+That is a compile error, not a crash at some later frame. `GlContext.live()`
+reports how many objects are still outstanding, so a leak in a frame loop is a
+number you can assert on rather than a slow climb in a memory graph.
 
-Mipmaps are not optional for anything tiled across a 3D surface. Without them a distant
-pattern samples one texel out of the dozen the pixel covers, and which one changes as the
-camera moves — the ground crawls and glitters. Anisotropy then fixes what mips alone get
-wrong at a grazing angle, where trilinear picks one level from the pixel's widest axis and
-blurs the direction that was not compressed.
-
-## darwin and linux only
-
-`milo.json` declares `"targets": ["darwin", "linux"]`, and the compiler enforces it —
-building for Windows names the package rather than failing on a missing symbol.
-`opengl32.dll` exports GL 1.1 only, so every 3.3 entry point here would be undefined.
-
-3.3 core is the floor on purpose: it is the highest version macOS ships, and old enough
-that every Mesa and every driver of the last decade has it.
-
-## A context is your job
-
-Every call needs a current GL context, and creating one belongs to the window system, not
-here — the library deliberately depends on nothing but the standard library. With SDL2
-that is `SDL_GL_SetAttribute` + `SDL_WINDOW_OPENGL` + `SDL_GL_CreateContext`, which the
-[`sdl`](https://github.com/milo-language/milo-sdl) package's `sdl/gl` module provides;
-`examples/` and `tests/` use it, and they carry that dependency in their own manifests so
-the published package does not. Calling into GL with no context bound is undefined
-behaviour, not an error return.
-
-## Verified bindings
-
-Every declaration carries `@cSig`, so the signature is checked against the real GL header
-at build time on any machine that has one — including each pointer parameter's pointee
-width, which is what an out-param's contract actually is. A machine with neither
-`OpenGL/gl3.h` nor `GL/glcorearb.h` gets a named warning, not a silent pass.
-
-## License
-
-MIT
+A full spinning-cube program, window and all: `examples/gpucube.milo`.
