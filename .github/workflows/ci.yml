@@ -1,0 +1,62 @@
+name: ci
+
+# Nothing gated this package until now, and the two repos that also went ungated
+# (dapweb, milo-emulators) both sat uncompilable for three weeks against a released
+# compiler before anyone noticed. The safe layer over GL is exactly the code a stdlib
+# rename breaks without a line of this repo changing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # llvmpipe: the runner has no GPU, and the texture test needs a real GL 3.3 core
+      # context to render into and read back from.
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SDL2 and a software GL stack
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev xvfb libgl1-mesa-dri libglx-mesa0
+
+      - name: Install milo
+        run: |
+          mkdir -p "$HOME/.milo-bin"
+          curl -fsSL https://github.com/milo-language/milo/releases/download/latest/milo-linux-x64.tar.gz \
+            | tar xz -C "$HOME/.milo-bin" --strip-components=1   # archive wraps the binary in milo-<platform>/
+          chmod +x "$HOME/.milo-bin/milo"
+          echo "$HOME/.milo-bin" >> "$GITHUB_PATH"
+
+      - name: Library compiles
+        run: milo check lib.milo
+
+      # tests/ and examples/ are their own packages with their own lock, pinning the sdl
+      # binding they open a window with. --frozen so a stale lock fails here rather than
+      # silently resolving to something else.
+      - name: Resolve test dependencies
+        working-directory: tests
+        run: milo install --frozen
+
+      # The texture test degrades to "skipping" when there is no video device, which is
+      # the right behaviour for a dev box and the wrong result for a gate. Under xvfb a
+      # skip means the display never came up, so treat it as a failure.
+      - name: Texture test against a real driver
+        working-directory: tests
+        run: |
+          out=$(xvfb-run -a -s "-screen 0 1280x1024x24" milo run texture.milo)
+          printf '%s\n' "$out"
+          case "$out" in *skipping*) echo "no GL context under xvfb: the sampling checks never ran"; exit 1;; esac
+
+      # The example runs an interactive loop, so it is compiled, not run.
+      - name: Example compiles
+        working-directory: examples
+        run: |
+          milo install --frozen
+          milo check gpucube.milo
