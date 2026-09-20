@@ -88,23 +88,23 @@ fn face(v: &mut Vec<f32>, nx: f64, ny: f64, nz: f64, ax: f64, ay: f64, az: f64, 
     let cx = nx * 0.5
     let cy = ny * 0.5
     let cz = nz * 0.5
-    vertex(v, cx - ax - bx, cy - ay - by, cz - az - bz, 0.0, 0.0, nx, ny, nz)
-    vertex(v, cx + ax - bx, cy + ay - by, cz + az - bz, 1.0, 0.0, nx, ny, nz)
-    vertex(v, cx + ax + bx, cy + ay + by, cz + az + bz, 1.0, 1.0, nx, ny, nz)
-    vertex(v, cx - ax - bx, cy - ay - by, cz - az - bz, 0.0, 0.0, nx, ny, nz)
-    vertex(v, cx + ax + bx, cy + ay + by, cz + az + bz, 1.0, 1.0, nx, ny, nz)
-    vertex(v, cx - ax + bx, cy - ay + by, cz - az + bz, 0.0, 1.0, nx, ny, nz)
+    vertex(&mut v, cx - ax - bx, cy - ay - by, cz - az - bz, 0.0, 0.0, nx, ny, nz)
+    vertex(&mut v, cx + ax - bx, cy + ay - by, cz + az - bz, 1.0, 0.0, nx, ny, nz)
+    vertex(&mut v, cx + ax + bx, cy + ay + by, cz + az + bz, 1.0, 1.0, nx, ny, nz)
+    vertex(&mut v, cx - ax - bx, cy - ay - by, cz - az - bz, 0.0, 0.0, nx, ny, nz)
+    vertex(&mut v, cx + ax + bx, cy + ay + by, cz + az + bz, 1.0, 1.0, nx, ny, nz)
+    vertex(&mut v, cx - ax + bx, cy - ay + by, cz - az + bz, 0.0, 1.0, nx, ny, nz)
 }
 
 fn cubeVertices(): Vec<f32> {
     var v: Vec<f32> = Vec.new()
     let h = 0.5
-    face(v, 0.0, 0.0, 1.0, h, 0.0, 0.0, 0.0, h, 0.0)
-    face(v, 0.0, 0.0, 0.0 - 1.0, 0.0 - h, 0.0, 0.0, 0.0, h, 0.0)
-    face(v, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0 - h, 0.0, h, 0.0)
-    face(v, 0.0 - 1.0, 0.0, 0.0, 0.0, 0.0, h, 0.0, h, 0.0)
-    face(v, 0.0, 1.0, 0.0, h, 0.0, 0.0, 0.0, 0.0, 0.0 - h)
-    face(v, 0.0, 0.0 - 1.0, 0.0, h, 0.0, 0.0, 0.0, 0.0, h)
+    face(&mut v, 0.0, 0.0, 1.0, h, 0.0, 0.0, 0.0, h, 0.0)
+    face(&mut v, 0.0, 0.0, 0.0 - 1.0, 0.0 - h, 0.0, 0.0, 0.0, h, 0.0)
+    face(&mut v, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0 - h, 0.0, h, 0.0)
+    face(&mut v, 0.0 - 1.0, 0.0, 0.0, 0.0, 0.0, h, 0.0, h, 0.0)
+    face(&mut v, 0.0, 1.0, 0.0, h, 0.0, 0.0, 0.0, 0.0, 0.0 - h)
+    face(&mut v, 0.0, 0.0 - 1.0, 0.0, h, 0.0, 0.0, 0.0, 0.0, h)
     return v
 }
 
@@ -235,7 +235,7 @@ pub fn main(): i32 {
     // The context owns every object made through it, so teardown is one call
     // and cannot happen after the GL context is gone.
     var gl = GlContext.new()
-    var sh = match Shader.compile(gl, VERT, FRAG) {
+    var sh = match Shader.compile(&mut gl, VERT, FRAG) {
         Result.Ok(s) => s
         Result.Err(e) => {
             print(e)
@@ -246,9 +246,9 @@ pub fn main(): i32 {
     attrs.push(3) // position
     attrs.push(2) // uv
     attrs.push(3) // normal
-    var cube = Mesh.new(gl, attrs)
+    var cube = Mesh.new(&mut gl, attrs)
     cube.upload(cubeVertices())
-    let tex = Texture2D.rgba8(gl, TEX_SIZE, TEX_SIZE, checkerTexture(), false)
+    let tex = Texture2D.rgba8(&mut gl, TEX_SIZE, TEX_SIZE, checkerTexture(), false)
 
     Gpu.depthTest(true)
     Gpu.cullBackFaces(true)
@@ -295,9 +295,9 @@ pub fn main(): i32 {
         SDL_GL_SwapWindow(win)
     }
 
-    cube.free(gl)
-    tex.free(gl)
-    sh.free(gl)
+    cube.free(&mut gl)
+    tex.free(&mut gl)
+    sh.free(&mut gl)
     gl.free()
     SDL_GL_DeleteContext(ctx)
     SDL_DestroyWindow(win)

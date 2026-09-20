@@ -63,7 +63,7 @@ fn main(): i32 {
         }
 
         var gl = GlContext.new()
-        let code = run(gl)
+        let code = run(&mut gl)
         // Nothing should be outstanding: the test frees everything by hand, and
         // this is what proves it rather than assuming it.
         if gl.live() != 0 {
@@ -84,13 +84,13 @@ fn run(gl: &mut GlContext): i32 {
     // Big enough that the mip chain has more than one level to build.
     let n = 8
     var bytes: Vec<u8> = Vec.filled(n * n * 3, SRGB_BYTE as u8)
-    let tex = Texture2D.srgb8(gl, n, n, bytes, true)
+    let tex = Texture2D.srgb8(&mut gl, n, n, bytes, true)
     tex.setWrap(Wrap.Repeat)
     tex.generateMipmaps()
     tex.setAnisotropy(16.0)
     if Gpu.error() != 0 {
         print("gl error after building the texture")
-        tex.free(gl)
+        tex.free(&mut gl)
         return 1
     }
 
@@ -99,7 +99,7 @@ fn run(gl: &mut GlContext): i32 {
     tex.setWrap(Wrap.Mirror)
     tex.setWrap(Wrap.Clamp)
 
-    var shader = Shader.compile(gl, "#version 330 core
+    var shader = Shader.compile(&mut gl, "#version 330 core
 layout (location = 0) in vec2 aPos;
 layout (location = 1) in vec2 aUv;
 out vec2 vUv;
@@ -110,20 +110,20 @@ void main() {
 ", SAMPLE_FRAG)
     match shader {
         Result.Ok(sh) => {
-            let target = Target.new(gl, 4, 4, false, false)
+            let target = Target.new(&mut gl, 4, 4, false, false)
             match target {
                 Result.Ok(t) => {
                     t.bind()
                     Gpu.clear(0.0, 0.0, 0.0, 1.0, false)
                     sh.bind()
                     sh.sampler("uTex", tex, 0)
-                    let quad = Mesh.fullscreenQuad(gl)
+                    let quad = Mesh.fullscreenQuad(&mut gl)
                     quad.draw()
                     let px = readPixelsRgba8(4, 4)
-                    quad.free(gl)
-                    t.free(gl)
-                    sh.free(gl)
-                    tex.free(gl)
+                    quad.free(&mut gl)
+                    t.free(&mut gl)
+                    sh.free(&mut gl)
+                    tex.free(&mut gl)
 
                     let red = (px[0] & 0xFF) as i64
                     var off = red - WANT_LINEAR_BYTE
@@ -141,15 +141,15 @@ void main() {
                 }
                 Result.Err(e) => {
                     print("target: " + e)
-                    sh.free(gl)
-                    tex.free(gl)
+                    sh.free(&mut gl)
+                    tex.free(&mut gl)
                     return 1
                 }
             }
         }
         Result.Err(e) => {
             print("shader: " + e)
-            tex.free(gl)
+            tex.free(&mut gl)
             return 1
         }
     }

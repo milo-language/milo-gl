@@ -457,7 +457,7 @@ impl Shader {
         unsafe {
             glDeleteProgram(self.id)
         }
-        forget(gl.programs, self.id)
+        forget(&mut gl.programs, self.id)
     }
 }
 
@@ -584,14 +584,14 @@ impl Mesh {
         var attrs: Vec<i64> = Vec.new()
         attrs.push(2)
         attrs.push(2)
-        var m = Mesh.new(gl, attrs)
+        var m = Mesh.new(&mut gl, attrs)
         var v: Vec<f32> = Vec.new()
-        pushQuadVertex(v, -1.0, -1.0, 0.0, 0.0)
-        pushQuadVertex(v, 1.0, -1.0, 1.0, 0.0)
-        pushQuadVertex(v, 1.0, 1.0, 1.0, 1.0)
-        pushQuadVertex(v, -1.0, -1.0, 0.0, 0.0)
-        pushQuadVertex(v, 1.0, 1.0, 1.0, 1.0)
-        pushQuadVertex(v, -1.0, 1.0, 0.0, 1.0)
+        pushQuadVertex(&mut v, -1.0, -1.0, 0.0, 0.0)
+        pushQuadVertex(&mut v, 1.0, -1.0, 1.0, 0.0)
+        pushQuadVertex(&mut v, 1.0, 1.0, 1.0, 1.0)
+        pushQuadVertex(&mut v, -1.0, -1.0, 0.0, 0.0)
+        pushQuadVertex(&mut v, 1.0, 1.0, 1.0, 1.0)
+        pushQuadVertex(&mut v, -1.0, 1.0, 0.0, 1.0)
         m.upload(v)
         return m
     }
@@ -601,8 +601,8 @@ impl Mesh {
             glDeleteBuffers(1, self.vbo.addrOf())
             glDeleteVertexArrays(1, self.vao.addrOf())
         }
-        forget(gl.buffers, self.vbo)
-        forget(gl.vaos, self.vao)
+        forget(&mut gl.buffers, self.vbo)
+        forget(&mut gl.vaos, self.vao)
     }
 }
 
@@ -666,7 +666,7 @@ impl Texture2D {
     fn srgb8(gl: &mut GlContext, w: i64, h: i64, pixels: &Vec<u8>, smooth: bool): Texture2D {
         assert(pixels.len >= w * h * 3, "Texture2D.srgb8: pixels is shorter than w*h*3")
         unsafe {
-            let id = newTexture(gl, smooth)
+            let id = newTexture(&mut gl, smooth)
             glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8, w as i32, h as i32, 0, GL_RGB, GL_UNSIGNED_BYTE, pixels.ptr() as *u8)
             return Texture2D {
                 id: id, w: w, h: h
@@ -683,7 +683,7 @@ impl Texture2D {
         // `unsafe` for, so the width/height claim is checked here or nowhere.
         assert(pixels.len >= w * h, "Texture2D.rgba8: pixels is shorter than w*h")
         unsafe {
-            let id = newTexture(gl, smooth)
+            let id = newTexture(&mut gl, smooth)
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w as i32, h as i32, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.ptr() as *u8)
             return Texture2D {
                 id: id, w: w, h: h
@@ -696,7 +696,7 @@ impl Texture2D {
     fn rgb32f(gl: &mut GlContext, w: i64, h: i64, pixels: &Vec<f32>, smooth: bool): Texture2D {
         assert(pixels.len >= w * h * 3, "Texture2D.rgb32f: pixels is shorter than w*h*3")
         unsafe {
-            let id = newTexture(gl, smooth)
+            let id = newTexture(&mut gl, smooth)
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, w as i32, h as i32, 0, GL_RGB, GL_FLOAT, pixels.ptr() as *u8)
             return Texture2D {
                 id: id, w: w, h: h
@@ -709,7 +709,7 @@ impl Texture2D {
     fn r32f(gl: &mut GlContext, w: i64, h: i64, pixels: &Vec<f32>, smooth: bool): Texture2D {
         assert(pixels.len >= w * h, "Texture2D.r32f: pixels is shorter than w*h")
         unsafe {
-            let id = newTexture(gl, smooth)
+            let id = newTexture(&mut gl, smooth)
             glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, w as i32, h as i32, 0, GL_RED, GL_FLOAT, pixels.ptr() as *u8)
             return Texture2D {
                 id: id, w: w, h: h
@@ -721,7 +721,7 @@ impl Texture2D {
     // whose useful area is smaller than the allocation.
     fn r32fEmpty(gl: &mut GlContext, w: i64, h: i64, smooth: bool): Texture2D {
         unsafe {
-            let id = newTexture(gl, smooth)
+            let id = newTexture(&mut gl, smooth)
             glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, w as i32, h as i32, 0, GL_RED, GL_FLOAT, 0 as *u8)
             return Texture2D {
                 id: id, w: w, h: h
@@ -755,7 +755,7 @@ impl Texture2D {
     // of every blur tap against RGBA32F.
     fn rgba16f(gl: &mut GlContext, w: i64, h: i64, smooth: bool): Texture2D {
         unsafe {
-            let id = newTexture(gl, smooth)
+            let id = newTexture(&mut gl, smooth)
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w as i32, h as i32, 0, GL_RGBA, GL_FLOAT, 0 as *u8)
             return Texture2D {
                 id: id, w: w, h: h
@@ -860,7 +860,7 @@ impl Texture2D {
         unsafe {
             glDeleteTextures(1, self.id.addrOf())
         }
-        forget(gl.textures, self.id)
+        forget(&mut gl.textures, self.id)
     }
 }
 
@@ -902,7 +902,7 @@ pub struct Target {
 impl Target {
     fn new(gl: &mut GlContext, w: i64, h: i64, depth: bool, smooth: bool): Result<Target, string> {
         unsafe {
-            let tex = Texture2D.rgba16f(gl, w, h, smooth)
+            let tex = Texture2D.rgba16f(&mut gl, w, h, smooth)
             var fbo: u32 = 0
             glGenFramebuffers(1, fbo.addrOf())
             gl.fbos.push(fbo)
@@ -925,12 +925,12 @@ impl Target {
                 if rb != 0 {
                     var d = rb
                     glDeleteRenderbuffers(1, d.addrOf())
-                    forget(gl.rbos, rb)
+                    forget(&mut gl.rbos, rb)
                 }
                 var f2 = fbo
                 glDeleteFramebuffers(1, f2.addrOf())
-                forget(gl.fbos, fbo)
-                tex.free(gl)
+                forget(&mut gl.fbos, fbo)
+                tex.free(&mut gl)
                 return Result.Err($"framebuffer incomplete: 0x{status}")
             }
             return Result.Ok(Target {
@@ -962,12 +962,12 @@ impl Target {
         unsafe {
             if self.depth != 0 {
                 glDeleteRenderbuffers(1, self.depth.addrOf())
-                forget(gl.rbos, self.depth)
+                forget(&mut gl.rbos, self.depth)
             }
             glDeleteFramebuffers(1, self.fbo.addrOf())
         }
-        forget(gl.fbos, self.fbo)
-        self.tex.free(gl)
+        forget(&mut gl.fbos, self.fbo)
+        self.tex.free(&mut gl)
     }
 }
 
