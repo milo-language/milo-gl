@@ -42,7 +42,7 @@ jobs:
       # silently resolving to something else.
       - name: Resolve test dependencies
         working-directory: tests
-        run: milo install --frozen
+        run: milo pkg install --frozen
 
       # The texture test degrades to "skipping" when there is no video device, which is
       # the right behaviour for a dev box and the wrong result for a gate. Under xvfb a
@@ -58,5 +58,5 @@ jobs:
       - name: Example compiles
         working-directory: examples
         run: |
-          milo install --frozen
+          milo pkg install --frozen
           milo check gpucube.milo
