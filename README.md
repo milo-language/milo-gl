@@ -24,8 +24,8 @@ Why it works that way, and every function and method:
 ## Installation
 
 ```bash
-milo add github.com/milo-language/milo-gl            # latest release
-milo add github.com/milo-language/milo-gl@v0.2.0     # or pin a tag
+milo pkg add github.com/milo-language/milo-gl            # latest release
+milo pkg add github.com/milo-language/milo-gl@v0.2.0     # or pin a tag
 ```
 
 ```milo
